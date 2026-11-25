@@ -1,0 +1,14 @@
+# IDM 工作区（研究用）
+.DSH/
+*.exe
+*.syso
+*.exe~
+
+# 第三方参考仓库与临时材料（上游 IAS 克隆等，仅作参考，不进版本控制）
+IDM-Activation-Script/
+.temp/
+
+dist/
+
+# 运行时数据（配置+日志）
+dist/data/
