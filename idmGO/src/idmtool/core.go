@@ -35,7 +35,10 @@ var dmValues = []string{
 }
 
 var (
-	guidRe     = regexp.MustCompile(`^\{[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}\}$`)
+	// 注意大小写：IDM 不同版本生成的 CLSID 试用键 GUID 大小写不一致
+	// （b18 为大写 {07999AC3-...}，b19 为小写 {cd4045b1-...}）。
+	// 用 (?i) 忽略大小写，否则小写键会被静默跳过、永远锁不上。
+	guidRe     = regexp.MustCompile(`(?i)^\{[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}\}$`)
 	digitsRe   = regexp.MustCompile(`^\d+$`)
 	plusEqRe   = regexp.MustCompile(`\+|=`)
 	mdataRe    = regexp.MustCompile(`MData|Model|scansk|Therad`)
@@ -293,13 +296,10 @@ func ScanClsidKeys(e *Env, includeLocked bool) []ClsidFinding {
 			if plusEqRe.MatchString(defVal) && len(kids) == 0 {
 				continue
 			}
-			// 启发式 3：\Version 子键默认值是纯数字且只有这一个子键
-			if len(kids) == 1 {
-				if v, ok := system.RegReadDefault(root, full+`\Version`); ok && digitsRe.MatchString(v) {
-					add(k, `Version 子键纯数字`)
-					continue
-				}
-			}
+			// 启发式 3 已移除：曾用「\Version 子键默认值纯数字」判定 IDM 键，
+			// 但大量系统 COM 键（大小写混排 GUID）也满足此条件，会被误判并锁死，
+			// 造成系统级破坏。IDM 的试用跟踪键一定带 Model（由启发式 4 捕获），
+			// 故该启发式既无必要又有害，删除。
 			// 启发式 4：任意值名含 MData/Model/scansk/Therad
 			if hasValueNameMatch(root, full) {
 				add(k, "含 MData/Model/scansk/Therad")

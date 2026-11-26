@@ -69,9 +69,17 @@ func OneClick(e *Env) (*Result, error) {
 	}
 
 	Step("[6/6] 锁死试用跟踪键（之后 IDM 无法递减试用天数）...")
-	// 复核给 IDM 一点时间写完键（跨天/慢机场景键会稍晚出现）。
+	// 复核给 IDM 一点时间写完键（跨天/慢机/新版 IDM 用异步建键都会稍晚出现）。
+	// 等到 90 秒：新版 IDM（如 6.43b19）会先写一个「临时 GUID」跟踪键，
+	// 随后才生成/切换最终的 Model 键；轮询偏短会漏锁，导致冻结失效。
 	findings := ScanClsidKeys(e, false)
-	for attempt := 0; len(findings) == 0 && attempt < 6; attempt++ {
+	for attempt := 0; len(findings) == 0 && attempt < 180; attempt++ {
+		if IsCancelled() {
+			break
+		}
+		if attempt%2 == 0 {
+			Step("  等待 IDM 生成试用跟踪键…（%ds）", attempt/2)
+		}
 		time.Sleep(500 * time.Millisecond)
 		findings = ScanClsidKeys(e, false)
 	}
