@@ -23,13 +23,14 @@
 - `idmtool.exe` 是一次性操作工具（装/还原/看状态），做完即可关。
 - `idmquiet.exe` 是**常驻**守护，生命周期长：① 关掉 IDM 反篡改提示「cracked product / 以管理员身份」；② 秒杀 IDM 拉起的浏览器子进程 → **不再跳购买页**。它单独成文件，开机自启，不随面板关闭而退出。
 
-## 核心：6 处字节补丁（IDMan.exe，同长度替换）
-| 文件偏移 | 原 → 新 | 作用 |
-|---|---|---|
-| `0x05190A` | `e821e1ffff`→`31c0909090` | 跳过 0x450630 许可校验（离线、不弹框、不联网）|
-| `0x2D8A90` `0x2E30B3` `0x2FBB85` | `Trial`→`Full ` | 版本显示 Full |
-| `0x3C3724` | `01..`→`00..` | lic_flag 初值=已注册 |
-| `0x312DF8` + 购买模板 | 清空 | 不自动打开购买页 |
+## 核心：IDMan.exe 字节补丁（idmtool.exe 生成）
+| 类别 | 说明 |
+|---|---|
+| 跳过许可校验 | `0x05190A: e821e1ffff -> 31c0909090`（不联网、不弹注册框）|
+| 显示 Full | `0x2D8A90 / 0x2E30B3 / 0x2FBB85: Trial -> Full ` |
+| lic_flag=0 | 文件 `0x3C3724: 01 -> 00`（已注册态）|
+| **禁止跳浏览器** | **20 处 `open + ShellExecuteA` 调用点全 NOP**（`ff1544e57c00 -> 909090909090`），彻底不打开购买/官网页面 |
+| 清购买 URL | `buy.html / buy1.html / welcome.html / welcome2.html / get_prices_for_app.html` 等全部清空 |
 
 补丁版 IDMan.exe 由 `idmtool.exe` 从原版备份生成（可复现）。原版备份：`work\IDMan.exe.orig-backup`。
 

@@ -57,27 +57,39 @@ static void ensure_admin_or_relaunch(void){
 static const char CHARSET[]="2YOPB3AQCVUXMNRS97WE0IZD4KLFGHJ8165T";
 static const int MODS[4]={43,23,17,53};
 
-/* 6 处补丁 */
+/* ===== 补丁表 ===== */
 typedef struct { unsigned off; const unsigned char*old; const unsigned char*neu; int len; const char*note; } PATCH;
 static const unsigned char P1o[]={0xE8,0x21,0xE1,0xFF,0xFF}, P1n[]={0x31,0xC0,0x90,0x90,0x90};
 static const unsigned char P2o[]={'T','r','i','a','l',0}, P2n[]={'F','u','l','l',' '};
 static const unsigned char P3o[]={'T','r','i','a','l'}, P3n[]={'F','u','l','l',' '};
 static const unsigned char P4o[]={'T','r','i','a','l',0}, P4n[]={'F','u','l','l',' '};
 static const unsigned char P5o[]={0x01,0x00,0x00,0x00}, P5n[]={0x00,0x00,0x00,0x00};
-static const unsigned char BUY_url[]="https://secure.internetdownloadmanager.com/buy.html";
-static unsigned char ZEROZ[52];
+/* open + ShellExecuteA 调用点(打开浏览器跳购买页)的原始 6 字节, 全部 NOP */
+static const unsigned char SEO[]={0xFF,0x15,0x44,0xE5,0x7C,0x00}, SEN[]={0x90,0x90,0x90,0x90,0x90,0x90};
+/* 20 处静态偏移 (VA-0x401000+0x400) */
+static const unsigned int OPEN_SITES[]={
+    0x00125D,0x0012A3,0x010233,0x02DC59,0x02DF97,0x02E1C3,0x02E211,0x0482B1,
+    0x066DEA,0x075B05,0x075B4B,0x0786C5,0x0865AA,0x0914DD,0x091A2B,0x0B6925,
+    0x0B6969,0x118F8A,0x12FCB4,0x1425F5
+};
+#define NOPEN (sizeof(OPEN_SITES)/sizeof(OPEN_SITES[0]))
 static const PATCH PATCHES[]={
     {0x05190A,P1o,P1n,5,"skip license check"},
     {0x2D8A90,P2o,P2n,5,"Trial->Full (1)"},
     {0x2E30B3,P3o,P3n,5,"Trial->Full (%s)"},
     {0x2FBB85,P4o,P4n,5,"Trial->Full (3)"},
     {0x3C3724,P5o,P5n,4,"lic_flag=0"},
-    {0x312DF8,BUY_url,ZEROZ,51,"blank buy.html"},
 };
 #define NPATCH (sizeof(PATCHES)/sizeof(PATCHES[0]))
+/* 需要整体清 0 的会触发打开浏览器的 '欢迎/购买/价格' 完整 URL */
 static const char*BUY_TMPL[]={
+    "https://secure.internetdownloadmanager.com/buy.html",
+    "https://secure.internetdownloadmanager.com/buy1.html",
+    "https://www.internetdownloadmanager.com/welcome.html",
+    "https://www.internetdownloadmanager.com/welcome2.html",
+    "https://secure.internetdownloadmanager.com/get_prices_for_app.html",
     "%sbuy_idm.html?%s%s","%sbuy_idm.html?%s","%sbuy1.html?%s%s","%sbuy1.html?%s",
-    "%sbuy.html?%s%s","%sbuy.html?%s","https://secure.internetdownloadmanager.com/buy1.html"
+    "%sbuy.html?%s%s","%sbuy.html?%s"
 };
 
 static HWND g_log;
@@ -137,11 +149,15 @@ static int apply_patches(unsigned char*d,unsigned sz){
     if(sz<0x3C3800u){ logf_(L"[FAIL] 文件太小"); return 0; }
     for(unsigned i=0;i<NPATCH;i++) if(memcmp(d+PATCHES[i].off,PATCHES[i].old,PATCHES[i].len)!=0){
         logf_(L"[FAIL] %hs @0x%X 不匹配",PATCHES[i].note,PATCHES[i].off); return 0; }
+    for(unsigned i=0;i<NOPEN;i++) if(memcmp(d+OPEN_SITES[i],SEO,6)!=0){
+        logf_(L"[FAIL] 打开浏览器调用点 @0x%X 不匹配",OPEN_SITES[i]); return 0; }
     for(unsigned i=0;i<NPATCH;i++){ memcpy(d+PATCHES[i].off,PATCHES[i].neu,PATCHES[i].len); logf_(L"[ok] %hs",PATCHES[i].note); }
+    for(unsigned i=0;i<NOPEN;i++){ memcpy(d+OPEN_SITES[i],SEN,6); }
+    logf_(L"[ok] 禁用 %u 处浏览器跳转(open+ShellExecuteA)",(unsigned)NOPEN);
     for(unsigned t=0;t<sizeof(BUY_TMPL)/sizeof(BUY_TMPL[0]);t++){
         const char*pat=BUY_TMPL[t];int pl=(int)strlen(pat),cnt=0;
         for(unsigned p=0;p+pl<=sz;p++) if(memcmp(d+p,pat,pl)==0){memset(d+p,0,pl);cnt++;p+=pl-1;}
-        logf_(L"[ok] 清空购买模板 [%hs] x%d",pat,cnt);
+        if(cnt) logf_(L"[ok] 清空购买URL [%hs] x%d",pat,cnt);
     }
     return 1;
 }
@@ -269,7 +285,6 @@ static LRESULT CALLBACK WndProc(HWND h,UINT msg,WPARAM wp,LPARAM lp){
     return DefWindowProcW(h,msg,wp,lp);
 }
 int WINAPI wWinMain(HINSTANCE hi,HINSTANCE hp,PWSTR cmd,int show){
-    for(int i=0;i<52;i++) ZEROZ[i]=0;
     srand((unsigned)(time(NULL)^GetCurrentProcessId()));
     ensure_admin_or_relaunch();
     /* 高 DPI 感知：运行期动态调用 Per-Monitor V2，失败退回 SetProcessDPIAware */
