@@ -3,12 +3,28 @@
 *.exe
 *.syso
 *.exe~
+*.o
+*.obj
+*.a
 
 # 第三方参考仓库与临时材料（上游 IAS 克隆等，仅作参考，不进版本控制）
 IDM-Activation-Script/
 .temp/
+**/.temp/
 
 dist/
 
 # 运行时数据（配置+日志）
 dist/data/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 打包产物 / 压缩包
+*.zip
+
+# 第二版：二进制备份、语言包、打包目录（大体积产物，不进仓库；
+# 用户端 IDMan.exe 原版由 idmtool 首次安装时自动备份生成）
+idmpatch/work/
+idmpatch/dist_pkg/
