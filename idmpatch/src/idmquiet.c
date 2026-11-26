@@ -42,13 +42,20 @@ static void act(void){
 }
 
 static void get_text(HWND h,wchar_t*b,int n){ b[0]=0; SendMessageW(h,WM_GETTEXT,(WPARAM)n,(LPARAM)b); }
-struct btnctx{int clicked;};
+/* mode: 1=警告框(可点确定/OK/是), 2=注册框(只点取消/关闭, 绝不点确定) */
+struct btnctx{int clicked;int mode;};
 static BOOL CALLBACK enum_btn(HWND h,LPARAM lp){
+    struct btnctx*c=(struct btnctx*)lp;
     wchar_t cls[32];GetClassNameW(h,cls,32);
     if(wcscmp(cls,L"Button")==0){wchar_t t[64];get_text(h,t,64);
-        /* 用 PostMessage 非阻塞，避免目标模态线程忙时卡死 */
-        if(wcsstr(t,L"取消")||wcsstr(t,L"关闭")||wcsstr(t,L"确定")||wcsstr(t,L"OK")||wcsstr(t,L"是")){
-            PostMessageW(h,BM_CLICK,0,0);((struct btnctx*)lp)->clicked=1;return FALSE;}
+        int hit=0;
+        if(c->mode==2){
+            /* 注册框：只允许取消/关闭，避免空表单点确定导致『请输入名称』死循环 */
+            if(wcsstr(t,L"取消")||wcsstr(t,L"关闭")) hit=1;
+        }else{
+            if(wcsstr(t,L"确定")||wcsstr(t,L"OK")||wcsstr(t,L"是")||wcsstr(t,L"关闭")) hit=1;
+        }
+        if(hit){ PostMessageW(h,BM_CLICK,0,0); c->clicked=1; return FALSE; }
     }
     return TRUE;
 }
@@ -62,7 +69,8 @@ static BOOL CALLBACK enum_top(HWND h,LPARAM lp){
     int is_warn = (wcscmp(title,L"Internet Download Manager")==0||wcscmp(title,L"IDM")==0);
     int is_reg  = (wcsstr(title,L"注册 Internet Download Manager")!=NULL);
     if(!is_warn && !is_reg) return TRUE;
-    struct btnctx x={0};EnumChildWindows(h,enum_btn,(LPARAM)&x);
+    struct btnctx x={0}; x.mode = is_reg ? 2 : 1;
+    EnumChildWindows(h,enum_btn,(LPARAM)&x);
     if(!x.clicked)PostMessageW(h,WM_CLOSE,0,0);
     return TRUE;
 }
